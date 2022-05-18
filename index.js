@@ -17,12 +17,19 @@ async function run() {
     try {
         await client.connect()
         const serviceCollection = client.db("doctors-portal").collection("services")
-        // uploading the data from mongoDB to server
+        const bookingCollection = client.db("doctors-portal").collection("booking")
+        // uploading the data from mongoDB to server to be used in client side
         app.get('/services', async (req, res) => {
             const query = {};
             const cursor = serviceCollection.find(query);
-            const result = await cursor.toArray()
-            res.send(result)
+            const result = await cursor.toArray();
+            res.send(result);
+        })
+        // uploading the booking data in server
+        app.post('/bookings', async (req, res) => {
+            const query = req.body;
+            const result = await bookingCollection.insertOne(query);
+            res.send(result);
         })
     }
     finally {
