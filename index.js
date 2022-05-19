@@ -17,7 +17,7 @@ async function run() {
     try {
         await client.connect()
         const serviceCollection = client.db("doctors-portal").collection("services")
-        const bookingCollection = client.db("doctors-portal").collection("booking")
+        const bookingCollection = client.db("doctors-portal").collection("bookings")
         // uploading the data from mongoDB to server to be used in client side
         app.get('/services', async (req, res) => {
             const query = {};
@@ -27,9 +27,29 @@ async function run() {
         })
         // uploading the booking data in server
         app.post('/bookings', async (req, res) => {
-            const query = req.body;
-            const result = await bookingCollection.insertOne(query);
-            res.send(result);
+            const booking = req.body;
+            const query = { treatment: booking.treatmentName, date: booking.date, name: booking.patientName }
+            const exists = await bookingCollection.findOne(query)
+            if (exists) {
+                return res.send({ success: false, booking: exists })
+            }
+            const result = await bookingCollection.insertOne(booking);
+            return res.send({ success: true, result });
+        })
+        // updated services after booking
+        app.get('/available', async (req, res) => {
+            const date = req.query.date;
+            console.log(date)
+            //getting all services
+            const services = await serviceCollection.find().toArray()
+            // getting the booking of the user of that date
+            const query = { date: date }
+            const bookings = await bookingCollection.find(query).toArray()
+            // find each service find bookings for that service
+
+
+            //sending the result
+            res.send(bookings)
         })
     }
     finally {
