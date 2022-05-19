@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { MongoClient, ServerApiVersion } = require('mongodb');
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const app = express();
@@ -12,7 +13,13 @@ app.use(express.json());
 
 //mongoDB
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@doctors-portal-backend.lkqdf.mongodb.net/?retryWrites=true&w=majority`;
+
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 });
+
+function verifyJWT(res, res, next) {
+    console.log('abc')
+}
+
 async function run() {
     try {
         await client.connect()
@@ -29,7 +36,13 @@ async function run() {
                 $set: user
             };
             const result = await usersCollection.updateOne(filter, updateDoc, options)
-            res.send(result)
+            const token = jwt.sign({ email: email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
+            res.send({ result, token })
+        })
+
+        // checking users
+        app.get('/users', async (req, res) => {
+            res.send(await usersCollection.find().toArray())
         })
 
         // uploading the data from mongoDB to server to be used in client side
@@ -54,10 +67,10 @@ async function run() {
         // bookings for one particular user
         app.get('/bookings', async (req, res) => {
             const patient = req.query.patient
+            const authorization = req.headers.authorization
+            console.log('auth header', authorization)
             const query = { patientEmail: patient }
-            console.log(query)
             const bookings = await bookingCollection.find(query).toArray()
-            console.log(bookings)
             res.send(bookings)
         })
 
