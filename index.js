@@ -18,6 +18,20 @@ async function run() {
         await client.connect()
         const serviceCollection = client.db("doctors-portal").collection("services")
         const bookingCollection = client.db("doctors-portal").collection("bookings")
+        const usersCollection = client.db("doctors-portal").collection("users")
+        // update or insert an existing or new user
+        app.put('/user/:email', async (req, res) => {
+            const email = req.params.email
+            const user = req.body
+            const options = { upsert: true }
+            const filter = { email: email };
+            const updateDoc = {
+                $set: user
+            };
+            const result = await usersCollection.updateOne(filter, updateDoc, options)
+            res.send(result)
+        })
+
         // uploading the data from mongoDB to server to be used in client side
         app.get('/services', async (req, res) => {
             const query = {};
@@ -37,6 +51,16 @@ async function run() {
             const result = await bookingCollection.insertOne(booking);
             return res.send({ success: true, result });
         })
+        // bookings for one particular user
+        app.get('/bookings', async (req, res) => {
+            const patient = req.query.patient
+            const query = { patientEmail: patient }
+            console.log(query)
+            const bookings = await bookingCollection.find(query).toArray()
+            console.log(bookings)
+            res.send(bookings)
+        })
+
 
         /* Not the proper way to query, after learning more about mongoDB we'll use aggregate lookup, pipeline, match, group */
         // updated services after booking
