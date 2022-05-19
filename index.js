@@ -29,6 +29,7 @@ async function run() {
         app.post('/bookings', async (req, res) => {
             const booking = req.body;
             const query = { treatment: booking.treatmentName, date: booking.date, name: booking.patientName }
+
             const exists = await bookingCollection.findOne(query)
             if (exists) {
                 return res.send({ success: false, booking: exists })
@@ -36,20 +37,29 @@ async function run() {
             const result = await bookingCollection.insertOne(booking);
             return res.send({ success: true, result });
         })
+
+        /* Not the proper way to query, after learning more about mongoDB we'll use aggregate lookup, pipeline, match, group */
         // updated services after booking
         app.get('/available', async (req, res) => {
-            const date = req.query.date;
-            console.log(date)
+            const date = req.query.date || 'May 19, 2022';
             //getting all services
             const services = await serviceCollection.find().toArray()
             // getting the booking of the user of that date
             const query = { date: date }
             const bookings = await bookingCollection.find(query).toArray()
-            // find each service find bookings for that service
-
-
+            // find each service 
+            services.forEach(service => {
+                //find bookings for that service
+                const serviceBookings = bookings.filter(booking => booking.treatmentName === service.name)
+                // select slots for the service booking
+                const bookedSlots = serviceBookings.map(booking => booking.slot)
+                // select those slots which are not booked
+                const available = service.slots.filter(slot => !bookedSlots.includes(slot))
+                // set available slots
+                service.slots = available;
+            })
             //sending the result
-            res.send(bookings)
+            res.send(services)
         })
     }
     finally {
