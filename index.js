@@ -81,7 +81,8 @@ async function run() {
         app.get('/bookings', verifyJWT, async (req, res) => {
             const patient = req.query.patient
             const decodedEmail = req.decoded.email
-            if (patient.email === decodedEmail) {
+            console.log(patient, decodedEmail)
+            if (patient === decodedEmail) {
                 const query = { patientEmail: patient }
                 const bookings = await bookingCollection.find(query).toArray()
                 res.send(bookings)
