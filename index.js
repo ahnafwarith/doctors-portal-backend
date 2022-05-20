@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const { MongoClient, ServerApiVersion } = require('mongodb');
 const jwt = require('jsonwebtoken');
+const { response } = require('express');
 require('dotenv').config();
 
 const app = express();
@@ -10,11 +11,6 @@ const port = process.env.PORT || 4000;
 // middleware
 app.use(cors());
 app.use(express.json());
-
-//mongoDB
-const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@doctors-portal-backend.lkqdf.mongodb.net/?retryWrites=true&w=majority`;
-
-const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 });
 
 function verifyJWT(req, res, next) {
     const authHeader = req.headers.authorization;
@@ -27,7 +23,7 @@ function verifyJWT(req, res, next) {
     // verify a token symmetric (if confusion check documentation)
     jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, function (err, decoded) {
         if (err) {
-            // if error, means token not matched access is forbidden
+            // if error, means token doesn't match so access is forbidden
             return res.status(403).send({ message: 'forbidden access' })
         }
         req.decoded = decoded
@@ -35,15 +31,20 @@ function verifyJWT(req, res, next) {
     });
 }
 
+//mongoDB
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@doctors-portal-backend.lkqdf.mongodb.net/?retryWrites=true&w=majority`;
+
+const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 });
+
 async function run() {
     try {
         await client.connect()
-        // collections
+        // Collections
         const serviceCollection = client.db("doctors-portal").collection("services")
         const bookingCollection = client.db("doctors-portal").collection("bookings")
         const usersCollection = client.db("doctors-portal").collection("users")
 
-        // update or insert an existing or new user
+        // Update or insert an existing or new user
         app.put('/user/:email', async (req, res) => {
             const email = req.params.email
             const user = req.body
@@ -55,6 +56,32 @@ async function run() {
             const result = await usersCollection.updateOne(filter, updateDoc, options)
             const token = jwt.sign({ email: email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
             res.send({ result, token })
+        })
+        // 
+        app.get('/admin/:email', async (req, res) => {
+            const email = req.params.email
+            const user = await usersCollection.findOne({ email: email })
+            const isAdmin = user.role === 'admin'
+            res.send({ admin: isAdmin })
+        })
+
+        // Make an existing user an Admin
+        app.put('/user/admin/:email', verifyJWT, async (req, res) => {
+            const email = req.params.email
+            const requester = req.decoded.email
+            console.log(email, requester)
+            const requesterAccount = await usersCollection.findOne({ email: requester })
+            if (requesterAccount.role === 'admin') {
+                const filter = { email: email };
+                const updateDoc = {
+                    $set: { role: 'admin' }
+                };
+                const result = await usersCollection.updateOne(filter, updateDoc)
+                res.send(result)
+            }
+            else {
+                res.status(403).send({ message: 'Unauthorized' })
+            }
         })
 
         // uploading the data from mongoDB to server to be used in client side
@@ -77,11 +104,11 @@ async function run() {
             const result = await bookingCollection.insertOne(booking);
             return res.send({ success: true, result });
         })
-        // bookings for one particular user
+
+        // Bookings for one particular user
         app.get('/bookings', verifyJWT, async (req, res) => {
             const patient = req.query.patient
             const decodedEmail = req.decoded.email
-            console.log(patient, decodedEmail)
             if (patient === decodedEmail) {
                 const query = { patientEmail: patient }
                 const bookings = await bookingCollection.find(query).toArray()
@@ -91,12 +118,14 @@ async function run() {
                 return res.status(403).send({ message: 'forbidden access' })
             }
         })
-        // Getting the users
-        app.get('/users', async (req, res) => {
+
+        // Getting all the users
+        app.get('/users', verifyJWT, async (req, res) => {
             res.send(await usersCollection.find().toArray())
         })
 
         /* Not the proper way to query, after learning more about mongoDB we'll use aggregate lookup, pipeline, match, group */
+
         // updated services after booking
         app.get('/available', async (req, res) => {
             const date = req.query.date || 'May 19, 2022';
