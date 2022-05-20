@@ -16,16 +16,33 @@ const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@doctors
 
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 });
 
-function verifyJWT(res, res, next) {
-    console.log('abc')
+function verifyJWT(req, res, next) {
+    const authHeader = req.headers.authorization;
+    /* 1st layer of protection (checking for token, if no token found will return the user --> not continue in API call) */
+    if (!authHeader) {
+        return res.status(401).send({ message: 'unauthorized access' })
+    }
+    /* 2nd layer of protection */
+    const token = authHeader.split(' ')[1];
+    // verify a token symmetric (if confusion check documentation)
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, function (err, decoded) {
+        if (err) {
+            // if error, means token not matched access is forbidden
+            return res.status(403).send({ message: 'forbidden access' })
+        }
+        req.decoded = decoded
+        next()
+    });
 }
 
 async function run() {
     try {
         await client.connect()
+        // collections
         const serviceCollection = client.db("doctors-portal").collection("services")
         const bookingCollection = client.db("doctors-portal").collection("bookings")
         const usersCollection = client.db("doctors-portal").collection("users")
+
         // update or insert an existing or new user
         app.put('/user/:email', async (req, res) => {
             const email = req.params.email
@@ -40,11 +57,6 @@ async function run() {
             res.send({ result, token })
         })
 
-        // checking users
-        app.get('/users', async (req, res) => {
-            res.send(await usersCollection.find().toArray())
-        })
-
         // uploading the data from mongoDB to server to be used in client side
         app.get('/services', async (req, res) => {
             const query = {};
@@ -52,6 +64,7 @@ async function run() {
             const result = await cursor.toArray();
             res.send(result);
         })
+
         // uploading the booking data in server
         app.post('/bookings', async (req, res) => {
             const booking = req.body;
@@ -65,15 +78,22 @@ async function run() {
             return res.send({ success: true, result });
         })
         // bookings for one particular user
-        app.get('/bookings', async (req, res) => {
+        app.get('/bookings', verifyJWT, async (req, res) => {
             const patient = req.query.patient
-            const authorization = req.headers.authorization
-            console.log('auth header', authorization)
-            const query = { patientEmail: patient }
-            const bookings = await bookingCollection.find(query).toArray()
-            res.send(bookings)
+            const decodedEmail = req.decoded.email
+            if (patient.email === decodedEmail) {
+                const query = { patientEmail: patient }
+                const bookings = await bookingCollection.find(query).toArray()
+                res.send(bookings)
+            }
+            else {
+                return res.status(403).send({ message: 'forbidden access' })
+            }
         })
-
+        // Getting the users
+        app.get('/users', async (req, res) => {
+            res.send(await usersCollection.find().toArray())
+        })
 
         /* Not the proper way to query, after learning more about mongoDB we'll use aggregate lookup, pipeline, match, group */
         // updated services after booking
