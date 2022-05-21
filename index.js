@@ -43,6 +43,25 @@ async function run() {
         const serviceCollection = client.db("doctors-portal").collection("services")
         const bookingCollection = client.db("doctors-portal").collection("bookings")
         const usersCollection = client.db("doctors-portal").collection("users")
+        const doctorsCollection = client.db("doctors-portal").collection("doctors")
+
+        // Verify Admin custom middleware
+        const verifyAdmin = async (req, res, next) => {
+            // Checking if the email has role of admin
+            const requester = req.decoded.email
+            const requesterAccount = await usersCollection.findOne({ email: requester })
+            if (requesterAccount.role === 'admin') {
+                next()
+            }
+            else {
+                res.status(403).send({ message: 'Unauthorized' })
+            }
+        }
+
+        // Getting all the users
+        app.get('/users', verifyJWT, async (req, res) => {
+            res.send(await usersCollection.find().toArray())
+        })
 
         // Update or insert an existing or new user
         app.put('/user/:email', async (req, res) => {
@@ -57,7 +76,8 @@ async function run() {
             const token = jwt.sign({ email: email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
             res.send({ result, token })
         })
-        // 
+
+        // Get an admin
         app.get('/admin/:email', async (req, res) => {
             const email = req.params.email
             const user = await usersCollection.findOne({ email: email })
@@ -66,30 +86,35 @@ async function run() {
         })
 
         // Make an existing user an Admin
-        app.put('/user/admin/:email', verifyJWT, async (req, res) => {
+        app.put('/user/admin/:email', verifyJWT, verifyAdmin, async (req, res) => {
             const email = req.params.email
-            const requester = req.decoded.email
-            console.log(email, requester)
-            const requesterAccount = await usersCollection.findOne({ email: requester })
-            if (requesterAccount.role === 'admin') {
-                const filter = { email: email };
-                const updateDoc = {
-                    $set: { role: 'admin' }
-                };
-                const result = await usersCollection.updateOne(filter, updateDoc)
-                res.send(result)
-            }
-            else {
-                res.status(403).send({ message: 'Unauthorized' })
-            }
+
+            const filter = { email: email };
+            const updateDoc = {
+                $set: { role: 'admin' }
+            };
+            const result = await usersCollection.updateOne(filter, updateDoc)
+            res.send(result)
         })
 
         // uploading the data from mongoDB to server to be used in client side
         app.get('/services', async (req, res) => {
             const query = {};
-            const cursor = serviceCollection.find(query);
+            const cursor = serviceCollection.find(query).project({ name: 1 });
             const result = await cursor.toArray();
             res.send(result);
+        })
+
+        // uploading doctor data
+        app.post('/doctors', verifyJWT, verifyAdmin, async (req, res) => {
+            const doctorData = req.body;
+            const result = await doctorsCollection.insertOne(doctorData);
+            res.send(result)
+        })
+
+        // laod the doctor data
+        app.get('/doctors', verifyJWT, verifyAdmin, async (req, res) => {
+            res.send(await doctorsCollection.find().toArray())
         })
 
         // uploading the booking data in server
@@ -117,11 +142,6 @@ async function run() {
             else {
                 return res.status(403).send({ message: 'forbidden access' })
             }
-        })
-
-        // Getting all the users
-        app.get('/users', verifyJWT, async (req, res) => {
-            res.send(await usersCollection.find().toArray())
         })
 
         /* Not the proper way to query, after learning more about mongoDB we'll use aggregate lookup, pipeline, match, group */
