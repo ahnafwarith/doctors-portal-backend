@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const jwt = require('jsonwebtoken');
 const { response } = require('express');
 require('dotenv').config();
@@ -112,9 +112,18 @@ async function run() {
             res.send(result)
         })
 
-        // laod the doctor data
+        // load the doctor data
         app.get('/doctors', verifyJWT, verifyAdmin, async (req, res) => {
-            res.send(await doctorsCollection.find().toArray())
+            const result = await doctorsCollection.find().toArray()
+            res.send(result)
+        })
+
+        // delete one doctor data
+        app.delete('/doctors/:email', verifyJWT, verifyAdmin, async (req, res) => {
+            const email = req.params.email;
+            const filter = { email: email };
+            const result = await doctorsCollection.deleteOne(filter)
+            res.send(result)
         })
 
         // uploading the booking data in server
@@ -128,6 +137,14 @@ async function run() {
             }
             const result = await bookingCollection.insertOne(booking);
             return res.send({ success: true, result });
+        })
+
+        // Bookings for one particular id
+        app.get('/bookings/:id', verifyJWT, async (req, res) => {
+            const id = req.params.id
+            const filter = { _id: ObjectId(id) }
+            const result = await bookingCollection.findOne(filter)
+            res.send(result)
         })
 
         // Bookings for one particular user
