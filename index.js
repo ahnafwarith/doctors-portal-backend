@@ -4,11 +4,12 @@ const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const jwt = require('jsonwebtoken');
 const { response } = require('express');
 require('dotenv').config();
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const app = express();
 const port = process.env.PORT || 4000;
 
-// middleware
+// Middleware
 app.use(cors());
 app.use(express.json());
 
@@ -124,6 +125,21 @@ async function run() {
             const filter = { email: email };
             const result = await doctorsCollection.deleteOne(filter)
             res.send(result)
+        })
+
+
+        //Payment intent
+        app.post('/payment-create-intent', verifyJWT, async (req, res) => {
+            const service = req.body
+            const price = service.price * 100
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: price,
+                currency: "usd",
+                payment_method_types: [
+                    "card"
+                ],
+            })
+            res.send({ clientSecret: paymentIntent.client_secret })
         })
 
         // uploading the booking data in server
